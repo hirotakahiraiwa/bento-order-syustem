@@ -1,8 +1,8 @@
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
-const { getDb, queryOne, runSql } = require('./db/init');
 const bcrypt = require('bcryptjs');
+const { initDb, queryOne, runSql } = require('./db/init');
 
 const app = express();
 const PORT = process.env.PORT || 4000;
@@ -11,7 +11,7 @@ app.use(cors());
 app.use(express.json());
 
 async function seedIfEmpty() {
-  const existing = queryOne('SELECT id FROM employees LIMIT 1');
+  const existing = await queryOne('SELECT id FROM employees LIMIT 1');
   if (existing) return;
 
   console.log('データベースが空のため、初期データを投入します...');
@@ -25,8 +25,8 @@ async function seedIfEmpty() {
   ];
   for (const emp of employees) {
     const hash = bcrypt.hashSync(emp.password, 10);
-    runSql(
-      'INSERT INTO employees (employee_number, name, password_hash, role, default_order) VALUES (?, ?, ?, ?, ?)',
+    await runSql(
+      'INSERT INTO employees (employee_number, name, password_hash, role, default_order) VALUES ($1, $2, $3, $4, $5)',
       [emp.number, emp.name, hash, emp.role, emp.default_order]
     );
   }
@@ -34,8 +34,7 @@ async function seedIfEmpty() {
 }
 
 async function start() {
-  // DB初期化を待つ
-  await getDb();
+  await initDb();
   await seedIfEmpty();
 
   const authRoutes = require('./routes/auth');
@@ -48,7 +47,6 @@ async function start() {
   app.use('/api/summary', summaryRoutes);
   app.use('/api/employees', employeeRoutes);
 
-  // 本番用：ビルド済みフロントエンドを配信
   const clientBuildPath = path.join(__dirname, '..', 'client', 'dist');
   app.use(express.static(clientBuildPath));
   app.get('*', (req, res) => {
